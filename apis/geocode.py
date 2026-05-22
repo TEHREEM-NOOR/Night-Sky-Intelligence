@@ -18,7 +18,10 @@ def get_coordinates(city_name: str) -> dict | None:
         headers=HEADERS
     )
 
-    if not data or len(data) == 0:
+    if data is None:
+        return None
+
+    if len(data) == 0:
         suggestions = _get_suggestions(city_name)
         return {"error": "not_found", "suggestions": suggestions}
 
