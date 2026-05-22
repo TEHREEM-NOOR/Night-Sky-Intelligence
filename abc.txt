@@ -1,0 +1,458 @@
+**Project Structure**
+
+```
+night-sky-intel/
+├── main.py
+├── server/
+│   ├── main.py
+│   └── routes/
+│       ├── iss.py
+│       ├── asteroids.py
+│       ├── weather.py
+│       ├── apod.py
+│       └── verdict.py
+├── apis/
+│   ├── __init__.py
+│   ├── geocode.py
+│   ├── iss.py
+│   ├── asteroids.py
+│   ├── weather.py
+│   └── apod.py
+├── core/
+│   ├── __init__.py
+│   ├── cache.py
+│   ├── http_client.py
+│   ├── moon.py
+│   ├── scales.py
+│   └── verdict.py
+├── display/
+│   ├── __init__.py
+│   └── dashboard.py
+├── gui/
+│   ├── electron/
+│   │   └── main.js
+│   └── src/
+│       ├── components/
+│       │   ├── CitySearchBar.jsx
+│       │   ├── ISSPanel.jsx
+│       │   ├── AsteroidsPanel.jsx
+│       │   ├── WeatherPanel.jsx
+│       │   ├── APODPanel.jsx
+│       │   ├── VerdictPanel.jsx
+│       │   └── SettingsDrawer.jsx
+│       ├── hooks/
+│       ├── store/
+│       │   └── dashboardStore.js
+│       └── App.jsx
+├── tests/
+│   ├── test_geocode.py
+│   ├── test_asteroids.py
+│   ├── test_moon.py
+│   ├── test_scales.py
+│   ├── test_verdict.py
+│   └── test_error_handling.py
+├── scripts/
+│   ├── start_backend.py
+│   └── bundle.sh
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── README.md
+└── ANSWERS.md
+```
+
+---
+
+**APIs Used — Full Detail**
+
+---
+
+**1. Nominatim (OpenStreetMap)**
+
+URL: `https://nominatim.openstreetmap.org/search`
+
+Auth: None. Free, no key required.
+
+What it does: Converts a city name string into latitude and longitude coordinates. Also used in reverse — taking ISS coordinates and returning what country or ocean it's currently over.
+
+Used in: `apis/geocode.py`
+
+Rate limit: 1 request per second. You must send a `User-Agent` header with your app name or requests get blocked. This is the only gotcha.
+
+Cache TTL: Indefinite. Coordinates don't change.
+
+---
+
+**2. Open-Notify (ISS)**
+
+URL: `http://api.open-notify.org/iss-now.json` for live position, `http://api.open-notify.org/iss-pass.json` for pass times.
+
+Auth: None. Completely free.
+
+What it does: Returns the ISS current latitude and longitude updated every few seconds. The pass endpoint takes your lat/lng and returns the next N times the ISS will pass overhead, as Unix timestamps, with duration in seconds.
+
+Used in: `apis/iss.py`
+
+Cache TTL: Position = 1 minute. Pass times = 30 minutes.
+
+Known issue: Open-Notify's pass endpoint has been unreliable since 2022. Fallback plan: calculate passes manually using the `ephem` library with TLE data from Celestrak. This is worth noting in ANSWERS.md as a known gap.
+
+---
+
+**3. NASA NeoWs (Near Earth Objects)**
+
+URL: `https://api.nasa.gov/neo/rest/v1/feed`
+
+Auth: NASA API key. Free, instant signup at `api.nasa.gov`. Without a key you can use `DEMO_KEY` which allows 30 requests per hour — fine for development.
+
+What it does: Returns all near-Earth asteroids for a given date range. Each object includes diameter estimate, miss distance in AU, relative velocity, and a boolean flag for potentially hazardous objects.
+
+Used in: `apis/asteroids.py`
+
+Cache TTL: 3 hours. Asteroid data doesn't change intraday.
+
+---
+
+**4. Open-Meteo**
+
+URL: `https://api.open-meteo.com/v1/forecast`
+
+Auth: None. Completely free, no key, no account.
+
+What it does: Returns hourly weather forecasts for any lat/lng. You request specific variables — `cloudcover` and `windspeed_10m` are the two you need. Returns 48 hours of hourly data. You extract the 20:00–23:59 window for tonight's stargazing conditions.
+
+Used in: `apis/weather.py`
+
+Cache TTL: 10 minutes.
+
+---
+
+**5. NASA APOD (Astronomy Picture of the Day)**
+
+URL: `https://api.nasa.gov/planetary/apod`
+
+Auth: Same NASA API key as NeoWs. One key covers both endpoints.
+
+What it does: Returns today's astronomy image — title, explanation text, image URL, and media type (sometimes it's a YouTube video instead of an image, your code needs to handle that gracefully).
+
+Used in: `apis/apod.py`
+
+Cache TTL: 6 hours. It only changes once per day.
+
+---
+
+**Phases — Full Detail**
+
+---
+
+**Phase 1 — Core CLI (the baseline)**
+
+Goal: A working command-line tool that fulfills the original SRS exactly.
+
+What gets built: All five `apis/` modules, the entire `core/` layer (cache, HTTP client with retry, moon calculator, scales converter, verdict scorer), and the Rich terminal dashboard in `display/dashboard.py`. The `main.py` entry point with argparse handling `--city`, `--days`, `--no-cache`, `--help`.
+
+Definition of done: Running `python main.py --city "Lahore"` produces the full terminal dashboard. All three assessor tests pass — slow API (timeout + retry), API error (partial render), bad input (validation + city suggestions).
+
+Tests written: All six test files in `tests/`.
+
+---
+
+**Phase 2 — FastAPI Backend**
+
+Goal: Wrap the CLI logic in a REST API so the GUI can consume it.
+
+What gets built: `server/main.py` boots uvicorn on port 7842. One route file per domain. A `/api/dashboard` endpoint that calls all five fetchers using `asyncio.gather()` — this is where you finally go async and cut total load time from ~12 seconds to ~2–3 seconds. A `/api/stream` SSE endpoint that pushes each section as it resolves. A `/api/health` endpoint for the Electron process to poll on startup. A `/api/cache` DELETE endpoint wired to the refresh button.
+
+Definition of done: You can hit `http://localhost:7842/api/dashboard?city=Lahore` in a browser and get a complete JSON response with all five data sections.
+
+---
+
+**Phase 3 — Electron Shell + React Foundation**
+
+Goal: A desktop window showing the dashboard data from Phase 2.
+
+What gets built: `electron/main.js` spawns the Python server as a child process, polls `/api/health`, creates the BrowserWindow when ready, kills the Python process on close. The React app with all seven components rendering real data. Zustand store managing all state. SSE consumer that progressively renders panels as data arrives — ISS panel appears in ~500ms, full dashboard in ~2–3 seconds.
+
+Definition of done: Double-clicking the app launches a window. The dashboard renders progressively. Closing the window kills the Python process cleanly with no orphans.
+
+---
+
+**Phase 4 — GUI Feature Layer**
+
+Goal: The features that make the GUI genuinely better than the CLI.
+
+What gets built: Live ISS world map — SVG continent outlines with a moving dot, updating every 10 seconds, showing the 90-minute ground track ahead. Asteroid timeline — a horizontal chart with this week's NEOs as dots, Y axis = miss distance in Moon distances, hazardous objects in red. 48-hour cloud cover sparkline with the tonight window highlighted. City autocomplete with debounced search and dropdown suggestions. City favorites stored in localStorage, shown as quick-access chips. Settings drawer for NASA API key entry (writes to `.env` via a POST endpoint), TTL overrides, units toggle.
+
+Definition of done: All visual panels are interactive and data-driven. Favorites persist across app restarts.
+
+---
+
+**Phase 5 — Notifications, Export, Packaging**
+
+Goal: Ship a distributable and add the features that make it feel like a real desktop app.
+
+What gets built: Desktop notifications via Electron's `Notification` API — opt-in alerts for ISS passing overhead within 30 minutes, and clear skies forecast for tonight. PDF export via Electron's `printToPDF`. Auto-refresh toggle — full dashboard every 15 minutes, ISS position every 10 seconds. PyInstaller bundle of the Python backend. `electron-builder` configuration for `.dmg`, `.exe`, and `.AppImage`. GitHub Actions CI that builds all three on push to `main`.
+
+Definition of done: A non-technical person can download the installer, run it, enter their NASA key in settings, and use the app with no terminal interaction at all.
+
+---
+
+Ready to start coding. Where do you want to begin — Phase 1 `core/http_client.py` and `core/cache.py` first, or the API modules?
+
+**Phase 1 — All Files To Create**
+
+```
+night-sky-intel/
+├── main.py
+├── apis/
+│   ├── __init__.py
+│   ├── geocode.py
+│   ├── iss.py
+│   ├── asteroids.py
+│   ├── weather.py
+│   └── apod.py
+├── core/
+│   ├── __init__.py
+│   ├── cache.py
+│   ├── http_client.py
+│   ├── moon.py
+│   ├── scales.py
+│   └── verdict.py
+├── display/
+│   ├── __init__.py
+│   └── dashboard.py
+├── tests/
+│   ├── test_geocode.py
+│   ├── test_asteroids.py
+│   ├── test_moon.py
+│   ├── test_scales.py
+│   ├── test_verdict.py
+│   └── test_error_handling.py
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── README.md
+└── ANSWERS.md
+```
+
+---
+
+**Commands to create every file and folder**
+
+Run this once from your project root. Works on macOS, Linux, and Windows Git Bash.
+
+```bash
+mkdir -p night-sky-intel/apis \
+         night-sky-intel/core \
+         night-sky-intel/display \
+         night-sky-intel/tests \
+         night-sky-intel/.cache
+
+cd night-sky-intel
+
+touch main.py \
+      apis/__init__.py \
+      apis/geocode.py \
+      apis/iss.py \
+      apis/asteroids.py \
+      apis/weather.py \
+      apis/apod.py \
+      core/__init__.py \
+      core/cache.py \
+      core/http_client.py \
+      core/moon.py \
+      core/scales.py \
+      core/verdict.py \
+      display/__init__.py \
+      display/dashboard.py \
+      tests/test_geocode.py \
+      tests/test_asteroids.py \
+      tests/test_moon.py \
+      tests/test_scales.py \
+      tests/test_verdict.py \
+      tests/test_error_handling.py \
+      .env.example \
+      .gitignore \
+      requirements.txt \
+      README.md \
+      ANSWERS.md
+```
+
+---
+
+**Windows CMD (if not using Git Bash)**
+
+```cmd
+mkdir night-sky-intel\apis night-sky-intel\core night-sky-intel\display night-sky-intel\tests night-sky-intel\.cache
+
+cd night-sky-intel
+
+type nul > main.py
+type nul > apis\__init__.py
+type nul > apis\geocode.py
+type nul > apis\iss.py
+type nul > apis\asteroids.py
+type nul > apis\weather.py
+type nul > apis\apod.py
+type nul > core\__init__.py
+type nul > core\cache.py
+type nul > core\http_client.py
+type nul > core\moon.py
+type nul > core\scales.py
+type nul > core\verdict.py
+type nul > display\__init__.py
+type nul > display\dashboard.py
+type nul > tests\test_geocode.py
+type nul > tests\test_asteroids.py
+type nul > tests\test_moon.py
+type nul > tests\test_scales.py
+type nul > tests\test_verdict.py
+type nul > tests\test_error_handling.py
+type nul > .env.example
+type nul > .gitignore
+type nul > requirements.txt
+type nul > README.md
+type nul > ANSWERS.md
+```
+
+---
+
+**Phase 1 — What We Do In Each File, In Order**
+
+The order matters. Each file depends on the ones above it.
+
+---
+
+**Step 1 — requirements.txt and .env.example**
+
+Two lines in requirements.txt: `httpx`, `rich`, `python-dotenv`. That's it. No other dependencies allowed per the spec.
+
+`.env.example` gets one line: `NASA_API_KEY=your_key_here`
+
+---
+
+**Step 2 — .gitignore**
+
+Covers: `.env`, `.cache/`, `__pycache__/`, `*.pyc`, `.DS_Store`, `dist/`, `build/`
+
+---
+
+**Step 3 — core/http_client.py**
+
+The foundation everything else calls. Builds an httpx client with an 8-second timeout. One function: `get(url, params, headers)`. On timeout or 5xx, waits 2 seconds and retries exactly once. On second failure, returns `None`. On 4xx, returns the status code so callers can handle it specifically. This is the file you point to in ANSWERS.md question 3.
+
+---
+
+**Step 4 — core/cache.py**
+
+Two functions: `get(key)` and `set(key, data, ttl_seconds)`. Stores JSON files in `.cache/` named by a slug of the key. On `get`, checks if file exists and if `time.time() - file_mtime < ttl`. Returns data dict or `None`. On `set`, writes JSON with a timestamp field inside the payload. Clean, no third-party cache library.
+
+---
+
+**Step 5 — core/moon.py**
+
+Pure math, no API. One function: `get_moon_phase(date)`. Calculates days since the known new moon on January 6 2000, modulo 29.53059, maps to phase name, emoji, and illumination percentage. Returns a dict. No imports except `datetime` and `math`.
+
+---
+
+**Step 6 — core/scales.py**
+
+Two functions. `asteroid_size_label(diameter_meters)` returns the human-scale string (football field, Eiffel Tower, etc). `miss_distance_moon(au_distance)` divides by 0.00257 and returns X times Moon's distance as a float rounded to 1 decimal. Pure calculation, no imports.
+
+---
+
+**Step 7 — core/verdict.py**
+
+One function: `calculate_verdict(cloud_cover, moon_illumination, iss_pass_tonight)`. Applies the scoring table from the spec, clamps between 1 and 5, returns score integer and a list of contributing factor strings for display. Imports nothing outside stdlib.
+
+---
+
+**Step 8 — apis/geocode.py**
+
+One function: `get_coordinates(city_name)`. Calls Nominatim search endpoint. Must set `User-Agent` header to `night-sky-intel/1.0`. On empty results, calls the same endpoint with a looser query and returns up to 3 suggestions. Returns `(lat, lng, display_name)` tuple or `None` with suggestions list. Uses `http_client.get()` and `cache.get/set()` with indefinite TTL (86400 * 365 seconds).
+
+---
+
+**Step 9 — apis/iss.py**
+
+Two functions. `get_iss_position()` — fetches current lat/lng, reverse geocodes via Nominatim to get country/ocean name, caches 1 minute. `get_iss_passes(lat, lng)` — fetches next 3 passes, converts Unix timestamps to local time strings, formats duration as minutes and seconds, caches 30 minutes. Returns dicts with all display-ready fields.
+
+---
+
+**Step 10 — apis/asteroids.py**
+
+One function: `get_neos(start_date, days)`. Builds the date range, calls NASA NeoWs with the API key from `.env`. Iterates the response, for each NEO calls `scales.asteroid_size_label()` and `scales.miss_distance_moon()`. Sorts by miss distance ascending. If more than 10, keeps top 5. Returns list of dicts with all display-ready fields including the hazardous flag. Caches 3 hours.
+
+---
+
+**Step 11 — apis/weather.py**
+
+One function: `get_tonight_weather(lat, lng)`. Calls Open-Meteo requesting `cloudcover` and `windspeed_10m` for hourly forecast. Extracts the 20:00–23:59 window for tonight, averages cloud cover, takes wind speed at 21:00. Maps cloud cover to the label from the spec. Returns dict. Caches 10 minutes.
+
+---
+
+**Step 12 — apis/apod.py**
+
+One function: `get_apod(api_key)`. Calls NASA APOD endpoint. Handles the case where `media_type` is `video` instead of `image` — in that case, skip the image URL and note it's a video. Truncates explanation to 120 characters. Caches 6 hours. Returns dict.
+
+---
+
+**Step 13 — display/dashboard.py**
+
+One function: `render(data)`. Takes a dict with all five data sections plus moon and verdict. Uses Rich `Console` and `Panel` with box style `DOUBLE`. Renders each section as a panel. Handles `None` sections gracefully by rendering "Data unavailable" in that panel. This is purely a display function — no API calls, no logic.
+
+---
+
+**Step 14 — main.py**
+
+The entry point. Sets up argparse with `--city`, `--days` (default 7, range 1–7), `--no-cache`, `--help`. Validates input per FR-02 before any API call. If `--no-cache`, deletes all files in `.cache/`. Calls each API module, collects results into a single dict, passes to `display.dashboard.render()`. Wraps everything in a try/except so no unhandled exception ever reaches the user.
+
+---
+
+**Step 15 — tests/**
+
+`test_moon.py` — unit tests for every phase boundary in the moon calculator. Pass in known dates, assert correct phase name and emoji.
+
+`test_scales.py` — unit tests for every size bracket and a few miss distance calculations.
+
+`test_verdict.py` — unit tests for every score combination, including edge cases like score clamping at 1 and 5.
+
+`test_geocode.py` — mocks the HTTP client, tests city found, city not found with suggestions, and empty input.
+
+`test_asteroids.py` — mocks the NASA response, tests NEO limit (more than 10 returns top 5), hazardous flag, human scale conversion.
+
+`test_error_handling.py` — tests that the dashboard renders with "Data unavailable" when one, two, or three APIs return None simultaneously.
+
+---
+
+**Step 16 — README.md and ANSWERS.md**
+
+README: Prerequisites section (Python 3.10+, NASA key signup link), three commands to get running (`git clone`, `pip install -r requirements.txt`, copy `.env.example` to `.env` and add key, `python main.py --city "YourCity"`). One section showing example output.
+
+ANSWERS.md: All five questions pre-filled based on what the code actually does. Question 3 points to `core/http_client.py` retry logic. Question 5 cites the async gap and the Open-Notify reliability issue.
+
+---
+
+**Coding Order Summary**
+
+```
+1. requirements.txt + .env.example + .gitignore
+2. core/http_client.py
+3. core/cache.py
+4. core/moon.py
+5. core/scales.py
+6. core/verdict.py
+7. apis/geocode.py
+8. apis/iss.py
+9. apis/asteroids.py
+10. apis/weather.py
+11. apis/apod.py
+12. display/dashboard.py
+13. main.py
+14. tests/ (all six files)
+15. README.md + ANSWERS.md
+```
+
+---
+
+Ready. Say "start" and I'll give you each file's complete code one at a time in that exact order.
