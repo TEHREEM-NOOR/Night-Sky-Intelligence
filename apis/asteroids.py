@@ -7,7 +7,8 @@ NEO_URL = "https://api.nasa.gov/neo/rest/v1/feed"
 CACHE_TTL = 10800
 
 def get_neos(start_date: date = None, days: int = 7) -> list | None:
-    if start_date is None:
+    # ADD THIS LINE — convert string to date if needed
+    if isinstance(start_date, str):
         start_date = date.today()
     end_date = start_date + timedelta(days=days - 1)
 

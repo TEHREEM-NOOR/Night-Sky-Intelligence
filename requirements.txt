@@ -1,3 +1,5 @@
 httpx
 rich
 python-dotenv
+fastapi
+uvicorn[standard]

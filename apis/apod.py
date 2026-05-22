@@ -4,12 +4,14 @@ from core import http_client, cache
 APOD_URL = "https://api.nasa.gov/planetary/apod"
 CACHE_TTL = 21600
 
-def get_apod() -> dict | None:
+def get_apod(api_key=None) -> dict | None:
     cached = cache.get("apod_today", CACHE_TTL)
     if cached:
         return cached
 
-    api_key = os.getenv("NASA_API_KEY", "DEMO_KEY")
+    if api_key is None:
+        api_key = os.getenv("NASA_API_KEY", "DEMO_KEY")
+
     data = http_client.get(
         APOD_URL,
         params={"api_key": api_key}

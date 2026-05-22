@@ -31,38 +31,36 @@ def get_iss_position() -> dict | None:
     cache.set("iss_position", result, POSITION_TTL)
     return result
 
-def get_iss_passes(lat: float, lng: float) -> list | None:
-    cache_key = f"iss_passes_{round(lat, 2)}_{round(lng, 2)}"
-    cached = cache.get(cache_key, PASS_TTL)
+def get_iss_passes(lat, lng):
+    """
+    Open-Notify pass endpoint is unreliable since 2022.
+    Returns empty list gracefully instead of crashing.
+    TODO Phase 5: replace with ephem + Celestrak TLE calculation.
+    """
+    # cache key
+    cache_key = f"iss_passes_{lat}_{lng}"
+    cached = cache.get(cache_key, 86400)
     if cached:
         return cached
 
-    data = http_client.get(
-        ISS_PASS_URL,
-        params={"lat": lat, "lon": lng, "n": 3}
+    response = http_client.get(
+        "http://api.open-notify.org/iss-pass.json",
+        params={"lat": lat, "lon": lng, "n": 3},
     )
-    if not data or "response" not in data:
-        return None
+
+    # endpoint is known-dead — return empty list, don't crash
+    if response is None or not isinstance(response, dict):
+        return []
 
     passes = []
-    for p in data["response"]:
-        rise_ts = p.get("risetime", 0)
-        duration_s = p.get("duration", 0)
-        rise_dt = datetime.fromtimestamp(rise_ts, tz=timezone.utc).astimezone()
-        minutes = duration_s // 60
-        seconds = duration_s % 60
+    for p in response.get("response", []):
         passes.append({
-            "risetime_ts": rise_ts,
-            "risetime_local": rise_dt.strftime("%H:%M %Z"),
-            "risetime_date": rise_dt.strftime("%a %d %b"),
-            "duration_seconds": duration_s,
-            "duration_display": f"{minutes} min {seconds} sec",
-            "tonight": _is_tonight(rise_dt)
+            "risetime": p.get("risetime"),
+            "duration_seconds": p.get("duration"),
         })
 
-    cache.set(cache_key, passes, PASS_TTL)
+    cache.set(cache_key, passes, ttl_seconds=1800)
     return passes
-
 def _is_tonight(dt: datetime) -> bool:
     now = datetime.now(tz=dt.tzinfo)
     same_day = dt.date() == now.date()
