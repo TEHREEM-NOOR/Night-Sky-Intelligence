@@ -121,10 +121,6 @@ async def dashboard(
     moon_illum = moon.get("illumination_pct", 0) if moon else 0
     iss_tonight = bool(iss_passes and len(iss_passes) > 0)
     verdict = calculate_verdict(cloud_cover, moon_illum, iss_tonight)
-    verdict_obj = {
-    "score": verdict["score"],
-    "factors": verdict["factors"]
-    }
     return JSONResponse(content={
         "city": display_name,
         "lat": lat,
@@ -136,10 +132,12 @@ async def dashboard(
         "apod": apod,
         "moon": moon,
         "verdict": {
-        "score": verdict["score"],
-        "factors": verdict["factors"],
-    },
+            "score": verdict["score"],
+            "label": verdict["label"],
+            "factors": verdict["factors"]
+        },
     })
+    
 
 
 # ── /api/stream (SSE) ─────────────────────────────────────────────────────────
@@ -206,8 +204,9 @@ async def stream(
         moon_illum   = moon_data.get("illumination_pct", 0) if moon_data else 0
         iss_tonight  = bool(passes_data and len(passes_data) > 0)
 
-        score, factors = calculate_verdict(cloud_cover, moon_illum, iss_tonight)
-        yield f"data: {json.dumps({'section': 'verdict', 'data': {'score': score, 'factors': factors}})}\n\n"
+        verdict = calculate_verdict(cloud_cover, moon_illum, iss_tonight)
+
+        yield f"data: {json.dumps({'section': 'verdict', 'data': verdict})}\n\n"
         yield "data: {\"section\": \"done\"}\n\n"
 
     return StreamingResponse(
