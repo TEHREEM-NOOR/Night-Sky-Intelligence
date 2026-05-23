@@ -1,123 +1,58 @@
-const { app, BrowserWindow } = require('electron')
-const { spawn } = require('child_process')
-const path = require('path')
-const http = require('http')
+const { app, BrowserWindow, Notification } = require("electron")
+const { spawn } = require("child_process")
+const path = require("path")
+const http  = require("http")
 
-let mainWindow = null
-let pythonProcess = null
-
-// ── start Python backend ──────────────────────────────────────────────────────
+let win     = null
+let backend = null
 
 function startBackend() {
-  const projectRoot = path.join(__dirname, '..', '..')
-  const scriptPath = path.join(projectRoot, 'server', 'main.py')
-
-  console.log('Starting Python backend...')
-
-  pythonProcess = spawn('python', [scriptPath], {
-    cwd: projectRoot,
-    stdio: 'inherit',
+  backend = spawn("python", [path.join(__dirname, "../../server/main.py")], {
+    stdio: "inherit",
+    detached: false,
   })
-
-  pythonProcess.on('error', (err) => {
-    console.error('Failed to start Python backend:', err.message)
-  })
-
-  pythonProcess.on('exit', (code) => {
-    console.log(`Python backend exited with code ${code}`)
-  })
+  backend.on("error", (e) => console.error("Backend error:", e))
 }
 
-// ── poll /api/health until server is ready ────────────────────────────────────
-
-function waitForBackend(retries = 30, interval = 1000) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0
-
-    const check = () => {
-      http.get('http://127.0.0.1:7842/api/health', (res) => {
-        if (res.statusCode === 200) {
-          console.log('Backend is ready.')
-          resolve()
-        } else {
-          retry()
-        }
-      }).on('error', retry)
-    }
-
-    const retry = () => {
-      attempts++
-      if (attempts >= retries) {
-        reject(new Error('Backend did not start in time.'))
-      } else {
-        setTimeout(check, interval)
-      }
-    }
-
-    check()
-  })
+function pollBackend(cb, tries = 0) {
+  if (tries > 30) { cb(false); return }
+  http.get("http://localhost:7842/api/health", (r) => {
+    if (r.statusCode === 200) cb(true)
+    else setTimeout(() => pollBackend(cb, tries + 1), 500)
+  }).on("error", () => setTimeout(() => pollBackend(cb, tries + 1), 500))
 }
-
-// ── create browser window ─────────────────────────────────────────────────────
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
+  win = new BrowserWindow({
+    width:  1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0a0a0f',
-    titleBarStyle: 'hiddenInset',
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-    title: 'Night Sky Intel',
+    backgroundColor: "#03040f",
+    titleBarStyle: "hiddenInset",
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
   })
 
-  // in dev load Vite dev server; in prod load built index.html
-  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+  const isDev = process.env.NODE_ENV === "development"
+  if (isDev) win.loadURL("http://localhost:3000")
+  else       win.loadFile(path.join(__dirname, "../dist/index.html"))
 
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools()
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
-  }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
+  win.on("closed", () => { win = null })
 }
 
-// ── app lifecycle ─────────────────────────────────────────────────────────────
-
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
   startBackend()
-
-  try {
-    await waitForBackend()
+  pollBackend((ready) => {
+    if (!ready) { console.error("Backend failed to start"); app.quit(); return }
     createWindow()
-  } catch (err) {
-    console.error(err.message)
-    // open window anyway — backend might still come up
-    createWindow()
-  }
+  })
 })
 
-app.on('window-all-closed', () => {
-  // kill Python backend cleanly — no orphan processes
-  if (pythonProcess) {
-    console.log('Killing Python backend...')
-    pythonProcess.kill()
-    pythonProcess = null
-  }
-
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+app.on("window-all-closed", () => {
+  if (backend) { backend.kill(); backend = null }
+  if (process.platform !== "darwin") app.quit()
 })
 
-app.on('activate', () => {
-  if (mainWindow === null) createWindow()
+app.on("activate", () => {
+  if (!win) createWindow()
 })

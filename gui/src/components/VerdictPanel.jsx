@@ -1,71 +1,44 @@
-import React from 'react'
-import useDashboardStore from '../store/dashboardStore'
+import useDashboardStore  from "../store/dashboardStore"
 
-const SCORE_CONFIG = {
-  1: { label: 'Poor', color: '#ef4444', stars: '★☆☆☆☆', bg: '#1a0a0a' },
-  2: { label: 'Below Average', color: '#f97316', stars: '★★☆☆☆', bg: '#1a0f0a' },
-  3: { label: 'Average', color: '#eab308', stars: '★★★☆☆', bg: '#1a1a0a' },
-  4: { label: 'Good', color: '#22c55e', stars: '★★★★☆', bg: '#0a1a0a' },
-  5: { label: 'Excellent', color: '#a78bfa', stars: '★★★★★', bg: '#0f0a1a' },
-}
+const STARS = ["★☆☆☆☆","★★☆☆☆","★★★☆☆","★★★★☆","★★★★★"]
+const LABELS = ["STAY INSIDE","POOR CONDITIONS","DECENT NIGHT","GREAT NIGHT","PERFECT NIGHT"]
+const COLORS = ["text-star-dim","text-nebula-pink","text-star-gold","text-nebula-cyan","text-nebula-cyan"]
 
 export default function VerdictPanel() {
   const verdict = useDashboardStore((s) => s.verdict)
-  const city = useDashboardStore((s) => s.city)
+  const city    = useDashboardStore((s) => s.city)
 
-  if (!verdict) {
-    return (
-      <div style={styles.panel}>
-        <h2 style={styles.heading}>🌟 Stargazing Verdict</h2>
-        <p style={styles.muted}>Calculating verdict...</p>
-      </div>
-    )
-  }
+  if (!verdict) return null
 
-  const config = SCORE_CONFIG[verdict.score] ?? SCORE_CONFIG[3]
+  const idx   = (verdict.score ?? 1) - 1
+  const color = COLORS[idx]
 
   return (
-    <div style={{ ...styles.panel, background: config.bg, borderColor: config.color }}>
-      <h2 style={styles.heading}>🌟 Stargazing Verdict</h2>
-      {city && <p style={styles.city}>{city}</p>}
+    <div className="animated-border animate-fade-up">
+      <div className="glass-panel rounded-[15px] p-8 text-center">
+        <p className="font-display text-xs text-star-dim tracking-widest uppercase mb-3">
+          Stargazing Verdict — {city}
+        </p>
 
-      <div style={styles.scoreRow}>
-        <span style={{ ...styles.stars, color: config.color }}>{config.stars}</span>
-        <span style={{ ...styles.label, color: config.color }}>{config.label}</span>
-        <span style={styles.score}>{verdict.score}/5</span>
-      </div>
+        <p className={`font-display text-5xl mb-2 ${color} glow-text-blue`}>
+          {STARS[idx]}
+        </p>
 
-      {verdict.factors?.length > 0 && (
-        <ul style={styles.factors}>
-          {verdict.factors.map((f, i) => (
-            <li key={i} style={styles.factor}>• {f}</li>
+        <p className={`font-display text-2xl tracking-widest ${color} mb-6`}>
+          {LABELS[idx]}
+        </p>
+
+        <div className="flex flex-col gap-2 text-left max-w-xs mx-auto">
+          {verdict.factors?.map((f, i) => (
+            <div key={i} className="flex items-center gap-3 text-sm font-body">
+              <span className={f.positive ? "text-nebula-cyan" : "text-nebula-pink"}>
+                {f.positive ? "✓" : "✗"}
+              </span>
+              <span className="text-star-dim">{f.label}</span>
+            </div>
           ))}
-        </ul>
-      )}
+        </div>
+      </div>
     </div>
   )
-}
-
-const styles = {
-  panel: {
-    background: '#111128',
-    border: '1px solid #1e1e3f',
-    borderRadius: '12px',
-    padding: '1.25rem',
-    gridColumn: '1 / -1',
-  },
-  heading: { color: '#a78bfa', marginBottom: '0.75rem', fontSize: '1rem' },
-  city: { color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.75rem' },
-  scoreRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    marginBottom: '0.75rem',
-  },
-  stars: { fontSize: '1.5rem', letterSpacing: '0.1em' },
-  label: { fontSize: '1.25rem', fontWeight: '700' },
-  score: { color: '#6b7280', fontSize: '0.9rem', marginLeft: 'auto' },
-  factors: { listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.3rem' },
-  factor: { color: '#9ca3af', fontSize: '0.85rem' },
-  muted: { color: '#6b7280', fontSize: '0.85rem' },
 }

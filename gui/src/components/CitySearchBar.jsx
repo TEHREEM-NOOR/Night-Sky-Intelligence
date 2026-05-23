@@ -1,124 +1,104 @@
-import React, { useState } from 'react'
-import useDashboardStore from '../store/dashboardStore'
-
-const API_BASE = 'http://localhost:7842'
+import { useState, useRef, useEffect } from "react"
+import { Search, Loader2, Star } from "lucide-react"
+import useDashboardStore  from "../store/dashboardStore"
+import { useSSE } from "../hooks/useSSE"
+import { useFavorites } from "../hooks/useFavorites"
 
 export default function CitySearchBar() {
-  const [input, setInput] = useState('')
-  const { loading, setLoading, setError, resetDashboard, setSectionData, setGeocode } =
-    useDashboardStore()
+  const [input, setSuggestions] = useState([])
+  const [query, setQuery]       = useState("")
+  const [open, setOpen]         = useState(false)
+  const debounce                = useRef(null)
+  const { loading, setCity }    = useDashboardStore()
+  const { fetch }               = useSSE()
+  const { favorites, add, has } = useFavorites()
 
-  const fetchDashboard = async (cityName) => {
-    if (!cityName.trim()) return
-    resetDashboard()
-    setLoading(true)
-    setError(null)
-
+  const suggest = async (q) => {
+    if (q.length < 2) { setSuggestions([]); return }
     try {
-      // use SSE stream so panels appear progressively
-      const url = `${API_BASE}/api/stream?city=${encodeURIComponent(cityName)}`
-      const source = new EventSource(url)
-
-      source.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-
-        if (msg.section === 'error') {
-          setError(msg.message)
-          setLoading(false)
-          source.close()
-          return
-        }
-
-        if (msg.section === 'geocode') {
-          setGeocode(msg.data.city, msg.data.lat, msg.data.lng)
-          return
-        }
-
-        if (msg.section === 'done') {
-          setLoading(false)
-          source.close()
-          return
-        }
-
-        setSectionData(msg.section, msg.data)
-      }
-
-      source.onerror = () => {
-        setError('Connection to backend lost. Is the server running?')
-        setLoading(false)
-        source.close()
-      }
-    } catch (err) {
-      setError(err.message)
-      setLoading(false)
-    }
+      const r = await window.fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`,
+        { headers: { "User-Agent": "night-sky-intel/1.0" } }
+      )
+      const d = await r.json()
+      setSuggestions(d.map((x) => x.display_name.split(",").slice(0, 2).join(", ")))
+    } catch { setSuggestions([]) }
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    fetchDashboard(input)
+  const onChange = (e) => {
+    setQuery(e.target.value)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(() => suggest(e.target.value), 350)
+    setOpen(true)
+  }
+
+  const select = (city) => {
+    setQuery(city)
+    setCity(city)
+    setSuggestions([])
+    setOpen(false)
+    fetch(city)
+    add(city)
+  }
+
+  const onKey = (e) => {
+    if (e.key === "Enter" && query.trim()) select(query.trim())
   }
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.header}>
-        <span style={styles.logo}>🌌</span>
-        <h1 style={styles.title}>Night Sky Intel</h1>
-        <p style={styles.subtitle}>Real-time stargazing conditions for any city</p>
+    <div className="w-full max-w-2xl mx-auto animate-fade-up">
+      {/* Search input */}
+      <div className="animated-border">
+        <div className="flex items-center gap-3 px-5 py-2 bg-space-900 rounded-[5px]">
+          {loading
+            ? <Loader2 size={20} className="text-nebula-blue animate-spin shrink-0" />
+            : <Search size={20} className="text-nebula-blue shrink-0" />
+          }
+          <input
+            type="text"
+            value={query}
+            onChange={onChange}
+            onKeyDown={onKey}
+            onFocus={() => setOpen(true)}
+            placeholder="Enter any city on Earth..."
+            className="flex-1 bg-transparent text-star-white font-body text-lg outline-none placeholder:text-star-dim"
+          />
+          {query && has(query) && (
+            <Star size={16} className="text-star-gold fill-star-gold shrink-0" />
+          )}
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Enter city name... e.g. Lahore"
-          style={styles.input}
-          disabled={loading}
-        />
-        <button type="submit" style={styles.button} disabled={loading}>
-          {loading ? '⏳ Loading...' : '🔭 Search'}
-        </button>
-      </form>
+      {/* Autocomplete dropdown */}
+      {open && input.length > 0 && (
+        <div className="glass-panel mt-2 rounded-2xl overflow-hidden shadow-panel z-50 relative">
+          {input.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => select(s)}
+              className="w-full text-left px-5 py-3 text-star-white font-body hover:bg-space-700 hover:text-nebula-blue transition-colors border-b border-space-800 last:border-0"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Favorites chips */}
+      {favorites.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-4">
+          {favorites.map((f) => (
+            <button
+              key={f}
+              onClick={() => select(f)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-space-800 border border-space-600 text-star-dim hover:border-nebula-blue hover:text-nebula-blue text-sm font-body transition-all"
+            >
+              <Star size={11} className="text-star-gold fill-star-gold" />
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
-}
-
-const styles = {
-  wrapper: {
-    padding: '2rem',
-    textAlign: 'center',
-    borderBottom: '1px solid #1e1e3f',
-    background: 'linear-gradient(180deg, #0d0d1a 0%, #0a0a0f 100%)',
-  },
-  header: { marginBottom: '1.5rem' },
-  logo: { fontSize: '3rem' },
-  title: {
-    fontSize: '2rem',
-    fontWeight: '700',
-    color: '#a78bfa',
-    letterSpacing: '0.05em',
-  },
-  subtitle: { color: '#6b7280', marginTop: '0.25rem' },
-  form: { display: 'flex', justifyContent: 'center', gap: '0.75rem' },
-  input: {
-    width: '320px',
-    padding: '0.75rem 1rem',
-    borderRadius: '8px',
-    border: '1px solid #2d2d5f',
-    background: '#111128',
-    color: '#e0e0ff',
-    fontSize: '1rem',
-    outline: 'none',
-  },
-  button: {
-    padding: '0.75rem 1.5rem',
-    borderRadius: '8px',
-    border: 'none',
-    background: '#7c3aed',
-    color: '#fff',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    fontWeight: '600',
-  },
 }

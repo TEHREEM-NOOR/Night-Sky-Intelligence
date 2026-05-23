@@ -21,11 +21,10 @@ def get_apod(api_key=None) -> dict | None:
 
     media_type = data.get("media_type", "image")
     explanation = data.get("explanation", "")
-    truncated = explanation[:120] + "..." if len(explanation) > 120 else explanation
 
     result = {
         "title": data.get("title", "No title"),
-        "explanation": truncated,
+        "explanation": explanation,
         "media_type": media_type,
         "url": data.get("url", ""),
         "is_video": media_type == "video"

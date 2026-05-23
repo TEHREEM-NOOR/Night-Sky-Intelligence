@@ -1,76 +1,76 @@
-import React from 'react'
-import CitySearchBar from './components/CitySearchBar'
-import ISSPanel from './components/ISSPanel'
-import AsteroidsPanel from './components/AsteroidsPanel'
-import WeatherPanel from './components/WeatherPanel'
-import APODPanel from './components/APODPanel'
-import VerdictPanel from './components/VerdictPanel'
-import useDashboardStore from './store/dashboardStore'
+import { Settings } from "lucide-react"
+import CitySearchBar    from "./components/CitySearchBar"
+import CityFavorites    from "./components/CityFavorites"
+import ISSPanel         from "./components/ISSPanel"
+import AsteroidsPanel   from "./components/AsteroidsPanel"
+import WeatherPanel     from "./components/WeatherPanel"
+import APODPanel        from "./components/APODPanel"
+import VerdictPanel     from "./components/VerdictPanel"
+import SettingsDrawer   from "./components/SettingsDrawer"
+import useDashboardStore  from "./store/dashboardStore"
 
 export default function App() {
-  const error = useDashboardStore((s) => s.error)
-  const verdict = useDashboardStore((s) => s.verdict)
-
-  // show dashboard grid only once any data has started arriving
-  const hasData = useDashboardStore((s) =>
-    s.iss_position || s.asteroids || s.weather || s.apod || s.moon || s.verdict
-  )
+  const { iss, toggleSettings } = useDashboardStore()
+  const hasData = iss !== null
 
   return (
-    <div style={styles.app}>
-      <CitySearchBar />
+    <div className="star-field min-h-screen relative">
+      <div className="nebula-bg" />
 
-      {error && (
-        <div style={styles.error}>
-          ⚠️ {error}
-        </div>
-      )}
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-10">
 
-      {hasData && (
-        <div style={styles.grid}>
-          <VerdictPanel />
-          <ISSPanel />
-          <WeatherPanel />
-          <AsteroidsPanel />
-          <APODPanel />
+        {/* Header */}
+        <div className="flex items-start justify-between mb-10 animate-fade-up">
+          <div>
+            <h1 className="font-display text-3xl text-star-white glow-text-blue tracking-widest uppercase">
+              🌌 Night Sky Intel
+            </h1>
+            <p className="text-star-dim font-body text-sm mt-2">
+              Live space intelligence for any city on Earth
+            </p>
+          </div>
+          <button
+            onClick={toggleSettings}
+            className="p-2.5 rounded-xl glass-panel border border-space-600 hover:border-nebula-blue text-star-dim hover:text-nebula-blue transition-all"
+          >
+            <Settings size={18} />
+          </button>
         </div>
-      )}
 
-      {!hasData && !error && (
-        <div style={styles.empty}>
-          <p>🌠 Enter a city above to check tonight's stargazing conditions</p>
-        </div>
-      )}
+        {/* Search */}
+        <CitySearchBar />
+        <CityFavorites />
+
+        {/* Dashboard grid */}
+        {hasData && (
+          <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="lg:col-span-2">
+              <VerdictPanel />
+            </div>
+            <div className="space-y-6">
+              <ISSPanel />
+              <APODPanel />
+            </div>
+            <div className="space-y-6">
+              <WeatherPanel />
+              <AsteroidsPanel />
+            </div>
+
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!hasData && (
+          <div className="text-center mt-24 animate-float">
+            <p className="text-6xl mb-4">🔭</p>
+            <p className="font-display text-star-dim text-sm tracking-widest uppercase">
+              Enter a city to begin
+            </p>
+          </div>
+        )}
+      </div>
+
+      <SettingsDrawer />
     </div>
   )
-}
-
-const styles = {
-  app: {
-    minHeight: '100vh',
-    background: '#0a0a0f',
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '1rem',
-    padding: '1.5rem',
-    maxWidth: '1200px',
-    margin: '0 auto',
-  },
-  error: {
-    margin: '1rem 1.5rem',
-    padding: '0.75rem 1rem',
-    background: '#1a0a0a',
-    border: '1px solid #ef4444',
-    borderRadius: '8px',
-    color: '#ef4444',
-    fontSize: '0.9rem',
-  },
-  empty: {
-    textAlign: 'center',
-    padding: '4rem 2rem',
-    color: '#4b5563',
-    fontSize: '1.1rem',
-  },
 }
