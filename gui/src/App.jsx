@@ -1,17 +1,26 @@
 import { Settings } from "lucide-react"
-import CitySearchBar    from "./components/CitySearchBar"
-import CityFavorites    from "./components/CityFavorites"
-import ISSPanel         from "./components/ISSPanel"
-import AsteroidsPanel   from "./components/AsteroidsPanel"
-import WeatherPanel     from "./components/WeatherPanel"
-import APODPanel        from "./components/APODPanel"
-import VerdictPanel     from "./components/VerdictPanel"
-import SettingsDrawer   from "./components/SettingsDrawer"
-import useDashboardStore  from "./store/dashboardStore"
+import CitySearchBar       from "./components/CitySearchBar"
+import CityFavorites       from "./components/CityFavorites"
+import ISSPanel            from "./components/ISSPanel"
+import AsteroidsPanel      from "./components/AsteroidsPanel"
+import WeatherPanel        from "./components/WeatherPanel"
+import APODPanel           from "./components/APODPanel"
+import VerdictPanel        from "./components/VerdictPanel"
+import SettingsDrawer      from "./components/SettingsDrawer"
+import ExportButton        from "./components/ExportButton"
+import NotificationToggle  from "./components/NotificationToggle"
+import useDashboardStore   from "./store/dashboardStore"
 
 export default function App() {
-  const { iss, toggleSettings } = useDashboardStore()
+  const { iss, verdict, city, toggleSettings } = useDashboardStore()
   const hasData = iss !== null
+
+  // Notify when verdict arrives
+  const notifyVerdict = () => {
+    if (verdict && city && window.electronAPI) {
+      window.electronAPI.notifyVerdict({ city, score: verdict.score })
+    }
+  }
 
   return (
     <div className="star-field min-h-screen relative">
@@ -29,33 +38,38 @@ export default function App() {
               Live space intelligence for any city on Earth
             </p>
           </div>
-          <button
-            onClick={toggleSettings}
-            className="p-2.5 rounded-xl glass-panel border border-space-600 hover:border-nebula-blue text-star-dim hover:text-nebula-blue transition-all"
-          >
-            <Settings size={18} />
-          </button>
+
+          {/* Toolbar */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <NotificationToggle />
+            <ExportButton />
+            <button
+              onClick={toggleSettings}
+              className="p-2.5 rounded-xl glass-panel border border-space-600 hover:border-nebula-blue text-star-dim hover:text-nebula-blue transition-all"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Search */}
         <CitySearchBar />
         <CityFavorites />
 
-        {/* Dashboard grid */}
+        {/* Dashboard */}
         {hasData && (
-          <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="lg:col-span-2">
-              <VerdictPanel />
+          <div className="mt-10 space-y-6">
+            <VerdictPanel />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                <ISSPanel />
+                <APODPanel />
+              </div>
+              <div className="space-y-6">
+                <WeatherPanel />
+                <AsteroidsPanel />
+              </div>
             </div>
-            <div className="space-y-6">
-              <ISSPanel />
-              <APODPanel />
-            </div>
-            <div className="space-y-6">
-              <WeatherPanel />
-              <AsteroidsPanel />
-            </div>
-
           </div>
         )}
 

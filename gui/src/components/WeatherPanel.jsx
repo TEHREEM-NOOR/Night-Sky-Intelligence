@@ -1,60 +1,43 @@
-import React from 'react'
-import useDashboardStore from '../store/dashboardStore'
+import  useDashboardStore  from "../store/dashboardStore"
+import CloudSparkline from "./CloudSparkline"
+import { Cloud } from "lucide-react"
 
 export default function WeatherPanel() {
   const weather = useDashboardStore((s) => s.weather)
-  const moon = useDashboardStore((s) => s.moon)
+  const moon    = useDashboardStore((s) => s.moon)
+
+  if (weather === null) return (
+    <div className="glass-panel rounded-2xl p-6 animate-pulse shadow-panel">
+      <div className="h-4 w-32 bg-space-700 rounded mb-4" />
+      <div className="h-24 bg-space-800 rounded-xl" />
+    </div>
+  )
 
   return (
-    <div style={styles.panel}>
-      <h2 style={styles.heading}>🌤️ Tonight's Conditions</h2>
-
-      {!weather ? (
-        <p style={styles.muted}>Fetching weather...</p>
-      ) : (
-        <div style={styles.grid}>
-          <Stat label="Cloud Cover" value={`${weather.cloud_cover_avg ?? 'N/A'}%`} />
-          <Stat label="Conditions" value={weather.cloud_label ?? weather.label ?? 'N/A'} />
-          <Stat label="Wind Speed" value={`${weather.wind_speed_kmh ?? weather.wind_speed ?? 'N/A'} km/h`} />
+    <div className="glass-panel rounded-2xl p-6 shadow-panel animate-fade-up">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="p-2 rounded-xl bg-space-800 border border-nebula-purple/20">
+          <Cloud size={18} className="text-nebula-purple" />
         </div>
-      )}
+        <h2 className="font-display text-sm text-nebula-purple glow-text-purple tracking-widest uppercase">Tonight's Conditions</h2>
+      </div>
 
-      <h3 style={styles.subheading}>🌙 Moon Phase</h3>
-      {!moon ? (
-        <p style={styles.muted}>Calculating moon phase...</p>
-      ) : (
-        <div style={styles.moonRow}>
-          <span style={styles.moonEmoji}>{moon.emoji}</span>
-          <div>
-            <div style={{ fontWeight: '600' }}>{moon.phase_name}</div>
-            <div style={styles.muted}>{moon.illumination_pct}% illuminated</div>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        {[
+          { label: "Cloud Cover", value: weather?.cloud_label ?? "—",       sub: `${weather?.cloud_cover ?? 0}%`,           color: weather?.cloud_cover < 40 ? "text-nebula-cyan" : "text-nebula-pink" },
+          { label: "Wind Speed",  value: `${weather?.wind_speed ?? "—"} km/h`, sub: "at 10m height",                       color: "text-star-white" },
+          { label: "Moon Phase",  value: moon?.emoji ?? "—",                 sub: moon?.phase_name ?? "—",                  color: "text-star-gold"  },
+          { label: "Illumination",value: `${moon?.illumination ?? 0}%`,      sub: moon?.illumination < 40 ? "Dark sky ✓" : "Bright moon", color: moon?.illumination < 40 ? "text-nebula-cyan" : "text-star-dim" },
+        ].map(({ label, value, sub, color }) => (
+          <div key={label} className="bg-space-900 rounded-xl p-4 border border-space-700">
+            <p className="text-star-dim text-xs font-body mb-2">{label}</p>
+            <p className={`font-mono text-xl ${color}`}>{value}</p>
+            <p className="text-star-dim text-xs font-body mt-1">{sub}</p>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+
+      {weather?.hourly && <CloudSparkline hourly={weather.hourly} tonightAvg={weather.cloud_cover} />}
     </div>
   )
-}
-
-function Stat({ label, value }) {
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ color: '#a78bfa', fontSize: '1.1rem', fontWeight: '700' }}>{value}</div>
-      <div style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.2rem' }}>{label}</div>
-    </div>
-  )
-}
-
-const styles = {
-  panel: {
-    background: '#111128',
-    border: '1px solid #1e1e3f',
-    borderRadius: '12px',
-    padding: '1.25rem',
-  },
-  heading: { color: '#a78bfa', marginBottom: '1rem', fontSize: '1rem' },
-  subheading: { color: '#6b7280', fontSize: '0.85rem', margin: '1rem 0 0.5rem' },
-  grid: { display: 'flex', justifyContent: 'space-around' },
-  muted: { color: '#6b7280', fontSize: '0.85rem' },
-  moonRow: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
-  moonEmoji: { fontSize: '2rem' },
 }

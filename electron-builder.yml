@@ -1,0 +1,48 @@
+appId: com.nightskyintel.app
+productName: Night Sky Intel
+copyright: Copyright © 2026
+
+directories:
+  output: dist-electron
+  buildResources: assets
+
+files:
+  - gui/dist/**/*
+  - gui/electron/**/*
+  - server/**/*
+  - apis/**/*
+  - core/**/*
+  - requirements.txt
+
+extraResources:
+  - from: server/
+    to: server/
+  - from: apis/
+    to: apis/
+  - from: core/
+    to: core/
+
+mac:
+  category: public.app-category.utilities
+  icon: assets/icon.icns
+  target:
+    - dmg
+    - zip
+
+win:
+  icon: assets/icon.ico
+  target:
+    - nsis
+    - portable
+
+linux:
+  icon: assets/icon.png
+  target:
+    - AppImage
+    - deb
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
