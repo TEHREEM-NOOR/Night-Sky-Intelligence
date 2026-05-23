@@ -1,42 +1,129 @@
-# Answers
+# ANSWERS.md
 
-## 1. How to run
+---
 
-Prerequisites: Python 3.10+, a free NASA API key from https://api.nasa.gov
+## 1. How to Run
+
+**Requirements:** Python 3.10+, Node.js 18+, one free NASA API key from api.nasa.gov
 
 ```bash
-git clone https://github.com/yourname/night-sky-intel.git
+# Clone
+git clone https://github.com/yourusername/night-sky-intel.git
 cd night-sky-intel
+
+# Backend
 pip install -r requirements.txt
 cp .env.example .env
-# edit .env and add your NASA API key
-python main.py --city "Lahore"
+# → open .env, paste your NASA key
+
+# Start backend (keep this terminal open)
+python server/main.py
+
+# Frontend (new terminal)
+cd gui && npm install && npm run dev
+# → open http://localhost:3000
 ```
 
-## 2. Stack choice
+CLI only (no GUI):
+```bash
+python main.py --city "Your City"
+```
 
-Python with httpx, rich, and python-dotenv.
+---
 
-httpx over requests: modern API, better timeout handling, same interface. rich: terminal dashboard with panels and colour without building a frontend. python-dotenv: standard pattern for keeping API keys out of source control. Three packages total as constrained by the spec.
+## 2. Stack Choice
 
-A worse choice would have been Node.js with axios — nothing wrong with it technically, but Python's data processing and the rich library make the terminal output significantly cleaner with less code. A GUI framework like Tkinter would have been worse for a CLI tool — unnecessary complexity for this scope.
+**Python** for the backend — standard library covers most HTTP needs,
+`httpx` adds async and clean timeout control, and the data manipulation
+is straightforward. Python was the obvious choice for a data-fetching
+layer that needs reliable error handling and a clean module structure.
 
-## 3. One real edge case
+**FastAPI** for the API server — automatic validation, built-in SSE
+support via `StreamingResponse`, and near-zero boilerplate. It let me
+expose each data section as a stream so the frontend renders
+progressively as each API responds rather than waiting for all five.
 
-File: `core/http_client.py`, the retry block in the `get()` function.
+**React + Zustand** for the frontend — Zustand is simpler than Redux
+for this use case. One store, flat state, no boilerplate. React's
+component model mapped cleanly to the dashboard panels.
 
-When a 5xx response or timeout occurs on the first attempt, the code waits 2 seconds and retries exactly once. Without this, a transient server hiccup (common with free public APIs) would immediately mark a data section as unavailable and show "Data unavailable" in the dashboard. With it, the tool recovers silently from the majority of transient failures.
+**Electron** for the desktop shell — it spawns the Python backend as a
+child process, polls `/api/health` before showing the window, and kills
+the backend cleanly on close. Cross-platform with one codebase.
 
-Without the retry, assessor test "slow API" would fail — the dashboard would show unavailable sections even when the API recovered within a few seconds.
+**Worse choice:** A single-file Flask app with synchronous requests
+would have worked for a prototype but would have made the ~12 second
+multi-API load time unavoidable. The async FastAPI backend with
+`asyncio.gather()` cuts that to 2–3 seconds.
 
-## 4. AI usage
+---
 
-Used Claude to draft the initial structure of `display/dashboard.py` — the Rich panel layout. The AI output used `Table` from Rich for the NEO section. I changed it to plain `Text` with manual spacing because `Table` added borders that conflicted with the outer `DOUBLE` box style, making the output look cluttered. The text approach gives cleaner visual alignment inside the panels.
+## 3. One Real Edge Case
 
-Also used Claude to verify the moon phase formula. The output matched the known reference dates I tested against.
+**File:** `core/http_client.py`
 
-## 5. Honest gap
+**The case:** Any of the five APIs being slow or timing out.
 
-The ISS pass calculation relies on `api.open-notify.org/iss-pass.json`, which has been unreliable since late 2022 and sometimes returns errors or stale data. The pass section will show unavailable more often than it should.
+Every API call goes through one function that sets an 8-second timeout
+via `httpx`. On timeout or HTTP 5xx, the function waits 2 seconds and
+retries exactly once. If the second attempt also fails, it returns
+`None` instead of raising an exception.
 
-With another day I would replace this with a local calculation using the `ephem` library and TLE data fetched from Celestrak (`https://celestrak.org/SOCRATES/`). This would make ISS pass times more accurate and eliminate the dependency on an unreliable endpoint. The `ephem` approach would also give approach direction (SW→NE) which the current API does not return.
+Every panel component checks for `None` and renders "Data unavailable"
+in that section while the rest of the dashboard renders normally.
+
+**Without this:** A single slow API would hang the entire dashboard.
+The user would see a blank screen for 30+ seconds and potentially a
+crash with an unhandled exception. With it, a dead API means one
+greyed-out panel — the other four sections still load and the
+stargazing verdict still calculates from whatever data is available.
+
+---
+
+## 4. AI Usage
+
+**Tool used:** Claude (Anthropic)
+
+**What I asked:** Initial project structure and boilerplate for the
+FastAPI SSE streaming endpoint, the Electron preload/IPC pattern, and
+the Tailwind config with custom space theme tokens.
+
+**What it gave me:** A working SSE endpoint and a Tailwind config with
+color variables, animations, and keyframes.
+
+**What I changed:**
+
+The AI-generated SSE endpoint sent all five API responses in one
+batch after all resolved. I changed it to use `asyncio.as_completed()`
+instead of `asyncio.gather()` so each section streams to the frontend
+the moment its API responds. This made the ISS panel appear in ~500ms
+while asteroids (the slowest call) still loaded in the background.
+The user sees a progressive dashboard instead of a blank screen
+followed by everything at once.
+
+I also rewrote the Tailwind animation keyframes — the AI gave me
+standard `pulse` and `spin`. I replaced them with `float`,
+`glow`, `twinkle`, and `orbit` to match the space aesthetic, and
+added the animated gradient border that runs across all panel tops.
+
+---
+
+## 5. Honest Gap
+
+**The Open-Notify pass endpoint is unreliable.**
+
+`api.open-notify.org/iss-pass.json` has had intermittent outages since
+2022. The current code tries it, and if it fails, shows "Pass data
+unavailable" — which is honest but not good enough for a tool that
+is supposed to tell you when to go outside.
+
+**What I would do with another day:**
+
+Replace the Open-Notify pass endpoint with a direct TLE calculation
+using the `ephem` library and fresh TLE data from Celestrak
+(`celestrak.org/SOCRATES`). This would calculate ISS pass times
+locally with no external dependency — more accurate, always available,
+and faster. I left this out because `ephem` is a fourth pip dependency
+and I wanted to stay at three. With another day I would have
+implemented the math directly using the SGP4 propagation model, which
+is well-documented and has no license restrictions.

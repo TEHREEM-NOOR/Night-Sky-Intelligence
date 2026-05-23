@@ -6,7 +6,6 @@ import AsteroidsPanel      from "./components/AsteroidsPanel"
 import WeatherPanel        from "./components/WeatherPanel"
 import APODPanel           from "./components/APODPanel"
 import VerdictPanel        from "./components/VerdictPanel"
-import SettingsDrawer      from "./components/SettingsDrawer"
 import ExportButton        from "./components/ExportButton"
 import NotificationToggle  from "./components/NotificationToggle"
 import useDashboardStore   from "./store/dashboardStore"
@@ -43,12 +42,7 @@ export default function App() {
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <NotificationToggle />
             <ExportButton />
-            <button
-              onClick={toggleSettings}
-              className="p-2.5 rounded-xl glass-panel border border-space-600 hover:border-nebula-blue text-star-dim hover:text-nebula-blue transition-all"
-            >
-              <Settings size={18} />
-            </button>
+
           </div>
         </div>
 
@@ -84,7 +78,6 @@ export default function App() {
         )}
       </div>
 
-      <SettingsDrawer />
     </div>
   )
 }

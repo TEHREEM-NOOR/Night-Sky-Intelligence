@@ -141,6 +141,7 @@ Output goes to `gui/dist-electron/`.
 ---
 
 ## Project Structure
+
 night-sky-intel/
 ├── main.py              # CLI entry point
 ├── server/              # FastAPI backend
@@ -151,6 +152,6 @@ night-sky-intel/
 │   ├── electron/        # Main process, notifications, export
 │   └── src/             # React components, store, hooks
 ├── tests/               # pytest test suite
-├── .env.example               #NASA_API_KEY=your_key_here
+├── .env.example         
 ├── README.md
 └── ANSWERS.md

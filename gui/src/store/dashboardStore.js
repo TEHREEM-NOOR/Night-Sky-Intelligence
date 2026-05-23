@@ -14,7 +14,8 @@ const useDashboardStore = create((set) => ({
   verdict: null,
   loading: false,
   error: null,
-  streamStatus: {},   // tracks which sections have arrived
+  streamStatus: {},
+  settingsOpen: false,   // ADD THIS
 
   // actions
   setCity: (city) => set({ city }),
@@ -35,13 +36,14 @@ const useDashboardStore = create((set) => ({
 
   setLoading: (loading) => set({ loading }),
 
-  // called by SSE consumer as each section arrives
   setSectionData: (section, data) => set((state) => ({
     [section]: data,
     streamStatus: { ...state.streamStatus, [section]: true },
   })),
 
   setGeocode: (city, lat, lng) => set({ city, lat, lng }),
+
+  toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),  // ADD THIS
 }))
 
 export default useDashboardStore
